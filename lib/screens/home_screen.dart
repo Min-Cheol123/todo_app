@@ -1,296 +1,71 @@
-// screens/home_screen.dart
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
-import '../services/auth_service.dart';
-
-// 간단한 Todo 클래스 (임시)
-class SimpleTodo {
-  final String id;
-  String text;
-  bool completed;
-  final String priority;
-  final DateTime createdAt;
-  final List<String> sharedWith;
-  final bool isShared;
-
-  SimpleTodo({
-    required this.id,
-    required this.text,
-    this.completed = false,
-    required this.priority,
-    required this.createdAt,
-    this.sharedWith = const [],
-    this.isShared = false,
-  });
-}
-
-enum FilterType { all, personal, shared, completed }
-enum Priority { high, medium, low }
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class HomeScreen extends StatefulWidget {
   @override
   _HomeScreenState createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
-  final AuthService _authService = AuthService();
-
-  FilterType _currentFilter = FilterType.all;
-  late TabController _tabController;
-  List<SimpleTodo> _todos = [];
-  bool _isLoading = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _tabController = TabController(length: 4, vsync: this);
-    _loadSampleData();
-    print('HomeScreen 초기화 완료');
-  }
+class _HomeScreenState extends State<HomeScreen> {
+  User? user = FirebaseAuth.instance.currentUser;
+  DateTime selectedDate = DateTime.now();
+  DateTime currentMonth = DateTime.now();
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  PageController _pageController = PageController(initialPage: 1200); // 큰 숫자로 시작
 
   @override
   void dispose() {
-    _tabController.dispose();
+    _pageController.dispose();
     super.dispose();
-  }
-
-  void _loadSampleData() {
-    print('샘플 데이터 로드 중...');
-    setState(() {
-      _todos = [
-        SimpleTodo(
-          id: '1',
-          text: '🎯 투두 앱 완성하기',
-          priority: 'high',
-          createdAt: DateTime.now().subtract(Duration(hours: 2)),
-        ),
-        SimpleTodo(
-          id: '2',
-          text: '🎨 앱 디자인 개선하기',
-          priority: 'medium',
-          createdAt: DateTime.now().subtract(Duration(hours: 1)),
-          completed: true,
-        ),
-        SimpleTodo(
-          id: '3',
-          text: '📱 기능 테스트하기',
-          priority: 'low',
-          createdAt: DateTime.now().subtract(Duration(minutes: 30)),
-          sharedWith: ['team@company.com'],
-          isShared: true,
-        ),
-      ];
-    });
-    print('샘플 데이터 로드 완료: ${_todos.length}개');
-  }
-
-  String get _userName => _authService.currentUser?.displayName ?? '사용자';
-  String get _userEmail => _authService.currentUser?.email ?? '';
-
-  List<SimpleTodo> _filterTodos(List<SimpleTodo> todos) {
-    switch (_currentFilter) {
-      case FilterType.personal:
-        return todos.where((todo) => !todo.isShared).toList();
-      case FilterType.shared:
-        return todos.where((todo) => todo.isShared).toList();
-      case FilterType.completed:
-        return todos.where((todo) => todo.completed).toList();
-      default:
-        return todos;
-    }
-  }
-
-  Future<void> _showAddTodoDialog() async {
-    print('할일 추가 다이얼로그 열기');
-    final TextEditingController controller = TextEditingController();
-    String selectedPriority = 'medium';
-
-    final result = await showDialog<Map<String, String>>(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-          title: Row(
-            children: [
-              Container(
-                padding: EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.blue[100],
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(Icons.add_task, color: Colors.blue[700], size: 20),
-              ),
-              SizedBox(width: 12),
-              Text('새 할일 추가', style: TextStyle(fontSize: 18)),
-            ],
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: controller,
-                decoration: InputDecoration(
-                  labelText: '할일 내용',
-                  hintText: '예: 프로젝트 보고서 작성하기',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                  prefixIcon: Icon(Icons.edit),
-                ),
-                autofocus: true,
-              ),
-              SizedBox(height: 16),
-              DropdownButtonFormField<String>(
-                value: selectedPriority,
-                decoration: InputDecoration(
-                  labelText: '우선순위',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                  prefixIcon: Icon(Icons.flag),
-                ),
-                items: [
-                  DropdownMenuItem(value: 'high', child: Text('🔴 높음')),
-                  DropdownMenuItem(value: 'medium', child: Text('🟡 보통')),
-                  DropdownMenuItem(value: 'low', child: Text('🟢 낮음')),
-                ],
-                onChanged: (value) {
-                  setDialogState(() {
-                    selectedPriority = value!;
-                  });
-                },
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: Text('취소'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                if (controller.text.trim().isNotEmpty) {
-                  Navigator.pop(context, {
-                    'text': controller.text.trim(),
-                    'priority': selectedPriority,
-                  });
-                }
-              },
-              child: Text('추가'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blue,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-
-    if (result != null) {
-      print('새 할일 추가: ${result['text']}');
-      setState(() {
-        _todos.insert(0, SimpleTodo(
-          id: DateTime.now().millisecondsSinceEpoch.toString(),
-          text: result['text']!,
-          priority: result['priority']!,
-          createdAt: DateTime.now(),
-        ));
-      });
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              Icon(Icons.check_circle, color: Colors.white),
-              SizedBox(width: 8),
-              Text('할일이 추가되었습니다! 🎉'),
-            ],
-          ),
-          backgroundColor: Colors.green,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        ),
-      );
-    }
-  }
-
-  void _toggleTodo(String id) {
-    print('할일 토글: $id');
-    setState(() {
-      final index = _todos.indexWhere((todo) => todo.id == id);
-      if (index != -1) {
-        _todos[index].completed = !_todos[index].completed;
-      }
-    });
-  }
-
-  void _deleteTodo(String id) {
-    print('할일 삭제: $id');
-    setState(() {
-      _todos.removeWhere((todo) => todo.id == id);
-    });
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            Icon(Icons.delete, color: Colors.white),
-            SizedBox(width: 8),
-            Text('할일이 삭제되었습니다'),
-          ],
-        ),
-        backgroundColor: Colors.red[400],
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-      ),
-    );
   }
 
   @override
   Widget build(BuildContext context) {
-    print('HomeScreen build 호출됨');
-
-    List<SimpleTodo> filteredTodos = _filterTodos(_todos);
-
     return Scaffold(
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [Color(0xFFEBF4FF), Color(0xFFF3E8FF)],
-          ),
-        ),
-        child: SafeArea(
-          child: Column(
-            children: [
-              // 헤더
-              _buildHeader(),
+      backgroundColor: Color(0xFFF5F7FA),
+      body: SafeArea(
+        child: Column(
+          children: [
+            // 상단 헤더
+            _buildHeader(),
 
-              // 통계
-              _buildStats(),
-
-              // 탭 바
-              _buildTabBar(),
-
-              // 할일 목록
-              Expanded(
-                child: filteredTodos.isEmpty
-                    ? _buildEmptyState()
-                    : _buildTodoList(filteredTodos),
+            // 달력 (고정 높이) - PageView로 변경
+            Container(
+              height: MediaQuery.of(context).size.height * 0.45,
+              child: PageView.builder(
+                controller: _pageController,
+                onPageChanged: (index) {
+                  setState(() {
+                    // 1200을 기준으로 월 계산
+                    int monthDiff = index - 1200;
+                    currentMonth = DateTime(DateTime.now().year, DateTime.now().month + monthDiff);
+                  });
+                },
+                itemBuilder: (context, index) {
+                  // 1200을 기준으로 월 계산
+                  int monthDiff = index - 1200;
+                  DateTime pageMonth = DateTime(DateTime.now().year, DateTime.now().month + monthDiff);
+                  return _buildCalendar(pageMonth);
+                },
               ),
+            ),
 
-              // 진행률 표시
-              if (_todos.isNotEmpty) _buildProgressBar(filteredTodos),
-            ],
-          ),
+            // 선택된 날짜 정보 (고정 높이)
+            Container(
+              height: 60,
+              child: _buildSelectedDateInfo(),
+            ),
+
+            // 일정 목록 (나머지 공간)
+            Expanded(
+              child: _buildScheduleList(),
+            ),
+
+            // 하단 버튼들
+            _buildBottomButtons(),
+          ],
         ),
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _showAddTodoDialog,
-        icon: Icon(Icons.add),
-        label: Text('새 할일'),
-        backgroundColor: Colors.blue,
-        foregroundColor: Colors.white,
-        elevation: 4,
       ),
     );
   }
@@ -299,132 +74,206 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     return Container(
       padding: EdgeInsets.all(20),
       child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          // 앱 로고
-          Container(
-            width: 50,
-            height: 50,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [Color(0xFF4F46E5), Color(0xFFEC4899)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
+          Row(
+            children: [
+              GestureDetector(
+                onTap: () {
+                  _pageController.previousPage(
+                    duration: Duration(milliseconds: 300),
+                    curve: Curves.easeInOut,
+                  );
+                },
+                child: Icon(Icons.arrow_back_ios, color: Colors.grey[600], size: 20),
               ),
-              borderRadius: BorderRadius.circular(12),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.blue.withOpacity(0.3),
-                  blurRadius: 8,
-                  offset: Offset(0, 4),
+              SizedBox(width: 10),
+              Text(
+                '${currentMonth.month}월',
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.grey[800],
                 ),
-              ],
-            ),
-            child: Icon(Icons.check_circle, color: Colors.white, size: 28),
+              ),
+              GestureDetector(
+                onTap: () {
+                  _showMonthPicker();
+                },
+                child: Icon(Icons.arrow_drop_down, color: Colors.grey[600], size: 24),
+              ),
+            ],
           ),
-
-          SizedBox(width: 15),
-
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '안녕하세요, $_userName님! 👋',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.grey[800],
-                  ),
-                ),
-                SizedBox(height: 4),
-                Row(
-                  children: [
-                    Icon(Icons.today, size: 16, color: Colors.grey[600]),
-                    SizedBox(width: 4),
-                    Text(
-                      DateFormat('yyyy년 MM월 dd일 EEEE', 'ko_KR').format(DateTime.now()),
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.grey[600],
+          Row(
+            children: [
+              Icon(Icons.search, color: Colors.grey[600], size: 24),
+              SizedBox(width: 15),
+              Stack(
+                children: [
+                  Icon(Icons.notifications_outlined, color: Colors.grey[600], size: 24),
+                  Positioned(
+                    right: 0,
+                    top: 0,
+                    child: Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: Colors.red,
+                        shape: BoxShape.circle,
                       ),
                     ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-
-          IconButton(
-            onPressed: () async {
-              await _authService.signOut();
-            },
-            icon: Icon(Icons.logout, color: Colors.grey[700]),
-            tooltip: '로그아웃',
-            style: IconButton.styleFrom(
-              backgroundColor: Colors.white.withOpacity(0.8),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            ),
+                  ),
+                ],
+              ),
+              SizedBox(width: 15),
+              Icon(Icons.menu, color: Colors.grey[600], size: 24),
+            ],
           ),
         ],
       ),
     );
   }
 
-  Widget _buildStats() {
-    int totalCount = _todos.length;
-    int personalCount = _todos.where((t) => !t.isShared).length;
-    int sharedCount = _todos.where((t) => t.isShared).length;
-    int completedCount = _todos.where((t) => t.completed).length;
+  Widget _buildCalendar([DateTime? monthToShow]) {
+    DateTime displayMonth = monthToShow ?? currentMonth;
 
     return Container(
-      padding: EdgeInsets.symmetric(horizontal: 20),
-      child: Row(
-        children: [
-          Expanded(child: _buildStatCard('전체', totalCount.toString(), Colors.blue, Icons.list_alt)),
-          SizedBox(width: 10),
-          Expanded(child: _buildStatCard('개인', personalCount.toString(), Colors.green, Icons.person)),
-          SizedBox(width: 10),
-          Expanded(child: _buildStatCard('공유', sharedCount.toString(), Colors.orange, Icons.group)),
-          SizedBox(width: 10),
-          Expanded(child: _buildStatCard('완료', completedCount.toString(), Colors.purple, Icons.check_circle)),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStatCard(String title, String value, Color color, IconData icon) {
-    return Container(
-      padding: EdgeInsets.all(12),
+      margin: EdgeInsets.symmetric(horizontal: 20),
+      padding: EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(15),
+        borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: color.withOpacity(0.2),
-            spreadRadius: 1,
-            blurRadius: 8,
+            color: Colors.grey.withOpacity(0.1),
+            spreadRadius: 0,
+            blurRadius: 10,
             offset: Offset(0, 3),
           ),
         ],
       ),
       child: Column(
         children: [
-          Icon(icon, color: color, size: 20),
-          SizedBox(height: 5),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: color,
-            ),
+          // 요일 헤더
+          Row(
+            children: ['일', '월', '화', '수', '목', '금', '토']
+                .asMap()
+                .entries
+                .map((entry) {
+              int index = entry.key;
+              String day = entry.value;
+              return Expanded(
+                child: Center(
+                  child: Text(
+                    day,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w500,
+                      fontSize: 14,
+                      color: index == 0
+                          ? Colors.red[400]
+                          : index == 6
+                          ? Colors.blue[400]
+                          : Colors.grey[600],
+                    ),
+                  ),
+                ),
+              );
+            })
+                .toList(),
           ),
-          SizedBox(height: 2),
-          Text(
-            title,
-            style: TextStyle(
-              fontSize: 11,
-              color: Colors.grey[600],
+          SizedBox(height: 15),
+
+          // 달력 날짜들
+          Expanded(
+            child: Column(
+              children: List.generate(6, (weekIndex) {
+                return Expanded(
+                  child: Row(
+                    children: List.generate(7, (dayIndex) {
+                      final date = _getDateForCalendar(weekIndex, dayIndex, displayMonth);
+                      final isCurrentMonth = date.month == displayMonth.month;
+                      final isToday = date.day == DateTime.now().day &&
+                          date.month == DateTime.now().month &&
+                          date.year == DateTime.now().year;
+                      final isSelected = date.day == selectedDate.day &&
+                          date.month == selectedDate.month &&
+                          date.year == selectedDate.year;
+                      final isSunday = dayIndex == 0;
+                      final isSaturday = dayIndex == 6;
+
+                      return Expanded(
+                        child: GestureDetector(
+                          onTap: isCurrentMonth ? () {
+                            setState(() {
+                              selectedDate = date;
+                              currentMonth = displayMonth; // 현재 표시된 월로 업데이트
+                            });
+                          } : null,
+                          child: Container(
+                            margin: EdgeInsets.all(2),
+                            decoration: BoxDecoration(
+                              color: isSelected
+                                  ? Colors.blue[500]
+                                  : isToday
+                                  ? Colors.blue[100]
+                                  : Colors.transparent,
+                              borderRadius: BorderRadius.circular(8),
+                              border: isSelected
+                                  ? Border.all(color: Colors.blue[600]!, width: 2)
+                                  : null,
+                            ),
+                            child: Stack(
+                              alignment: Alignment.center,
+                              children: [
+                                Text(
+                                  '${date.day}',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    color: !isCurrentMonth
+                                        ? Colors.grey[300]
+                                        : isSelected
+                                        ? Colors.white
+                                        : isToday
+                                        ? Colors.blue[700]
+                                        : isSunday
+                                        ? Colors.red[400]
+                                        : isSaturday
+                                        ? Colors.blue[400]
+                                        : Colors.grey[800],
+                                    fontWeight: isToday || isSelected
+                                        ? FontWeight.w600
+                                        : FontWeight.normal,
+                                  ),
+                                ),
+                                // Firestore에서 일정 확인해서 점 표시
+                                StreamBuilder<QuerySnapshot>(
+                                  stream: _getSchedulesForDate(date),
+                                  builder: (context, snapshot) {
+                                    if (snapshot.hasData && snapshot.data!.docs.isNotEmpty && isCurrentMonth) {
+                                      return Positioned(
+                                        bottom: 6,
+                                        child: Container(
+                                          width: 6,
+                                          height: 6,
+                                          decoration: BoxDecoration(
+                                            color: isSelected ? Colors.white : Colors.blue[500],
+                                            shape: BoxShape.circle,
+                                          ),
+                                        ),
+                                      );
+                                    }
+                                    return SizedBox();
+                                  },
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    }),
+                  ),
+                );
+              }),
             ),
           ),
         ],
@@ -432,313 +281,378 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildTabBar() {
+  Widget _buildSelectedDateInfo() {
+    final dayNames = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
+    final dayName = dayNames[selectedDate.weekday % 7];
+
     return Container(
-      margin: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+      margin: EdgeInsets.symmetric(horizontal: 20),
+      padding: EdgeInsets.symmetric(horizontal: 20, vertical: 15),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(15),
+        borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.grey.withOpacity(0.1),
-            spreadRadius: 1,
-            blurRadius: 5,
+            color: Colors.grey.withOpacity(0.05),
+            spreadRadius: 0,
+            blurRadius: 8,
             offset: Offset(0, 2),
           ),
         ],
       ),
-      child: TabBar(
-        controller: _tabController,
-        onTap: (index) {
-          setState(() {
-            _currentFilter = FilterType.values[index];
-          });
-        },
-        tabs: [
-          Tab(text: '전체'),
-          Tab(text: '개인'),
-          Tab(text: '공유'),
-          Tab(text: '완료'),
-        ],
-        labelColor: Colors.blue,
-        unselectedLabelColor: Colors.grey[600],
-        indicator: BoxDecoration(
-          color: Colors.blue.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        indicatorSize: TabBarIndicatorSize.tab,
-        dividerColor: Colors.transparent,
-      ),
-    );
-  }
-
-  Widget _buildTodoList(List<SimpleTodo> todos) {
-    return ListView.builder(
-      padding: EdgeInsets.all(20),
-      itemCount: todos.length,
-      itemBuilder: (context, index) {
-        final todo = todos[index];
-        return _buildTodoItem(todo);
-      },
-    );
-  }
-
-  Widget _buildTodoItem(SimpleTodo todo) {
-    Color priorityColor = todo.priority == 'high' ? Colors.red :
-    todo.priority == 'medium' ? Colors.orange : Colors.green;
-    String priorityText = todo.priority == 'high' ? '🔴 높음' :
-    todo.priority == 'medium' ? '🟡 보통' : '🟢 낮음';
-
-    return Container(
-      margin: EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(15),
-        border: Border.all(color: priorityColor.withOpacity(0.3), width: 2),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.1),
-            spreadRadius: 1,
-            blurRadius: 8,
-            offset: Offset(0, 3),
+      child: Row(
+        children: [
+          Text(
+            '${selectedDate.month}월 ${selectedDate.day}일 $dayName',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+              color: Colors.grey[800],
+            ),
+          ),
+          Spacer(),
+          Text(
+            '음 6.26',
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.grey[500],
+            ),
           ),
         ],
       ),
-      child: Padding(
-        padding: EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                GestureDetector(
-                  onTap: () => _toggleTodo(todo.id),
-                  child: Container(
-                    width: 24,
-                    height: 24,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: todo.completed ? Colors.green : Colors.grey,
-                        width: 2,
-                      ),
-                      color: todo.completed ? Colors.green : Colors.transparent,
-                    ),
-                    child: todo.completed
-                        ? Icon(Icons.check, color: Colors.white, size: 16)
-                        : null,
+    );
+  }
+
+  Widget _buildScheduleList() {
+    return Container(
+      margin: EdgeInsets.symmetric(horizontal: 20),
+      child: StreamBuilder<QuerySnapshot>(
+        stream: _getSchedulesForDate(selectedDate),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return Center(child: CircularProgressIndicator());
+          }
+
+          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+            return Container(
+              width: double.infinity,
+              padding: EdgeInsets.all(30),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.grey.withOpacity(0.05),
+                    spreadRadius: 0,
+                    blurRadius: 8,
+                    offset: Offset(0, 2),
                   ),
-                ),
-                SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    todo.text,
+                ],
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    width: 4,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: Colors.grey[300],
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  SizedBox(height: 15),
+                  Text(
+                    '일정이 없습니다',
                     style: TextStyle(
                       fontSize: 16,
-                      decoration: todo.completed ? TextDecoration.lineThrough : null,
-                      color: todo.completed ? Colors.grey : Colors.grey[800],
-                      fontWeight: FontWeight.w500,
+                      color: Colors.grey[500],
                     ),
                   ),
-                ),
-                IconButton(
-                  onPressed: () => _deleteTodo(todo.id),
-                  icon: Icon(Icons.delete, color: Colors.red, size: 20),
-                  constraints: BoxConstraints(minWidth: 32, minHeight: 32),
-                  tooltip: '삭제하기',
-                ),
-              ],
-            ),
-            SizedBox(height: 12),
-            Wrap(
-              spacing: 16,
-              runSpacing: 8,
-              children: [
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.flag, size: 14, color: priorityColor),
-                    SizedBox(width: 4),
-                    Text(
-                      priorityText,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: priorityColor,
-                        fontWeight: FontWeight.w500,
+                ],
+              ),
+            );
+          }
+
+          return SingleChildScrollView(
+            child: Column(
+              children: snapshot.data!.docs.map((doc) {
+                Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
+                return Container(
+                  width: double.infinity,
+                  margin: EdgeInsets.only(bottom: 10),
+                  padding: EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.grey.withOpacity(0.05),
+                        spreadRadius: 0,
+                        blurRadius: 8,
+                        offset: Offset(0, 2),
                       ),
-                    ),
-                  ],
-                ),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.schedule, size: 14, color: Colors.grey[500]),
-                    SizedBox(width: 4),
-                    Text(
-                      DateFormat('MM-dd HH:mm').format(todo.createdAt),
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey[500],
-                      ),
-                    ),
-                  ],
-                ),
-                if (todo.isShared)
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
+                    ],
+                  ),
+                  child: Row(
                     children: [
-                      Icon(Icons.group, size: 14, color: Colors.orange[600]),
-                      SizedBox(width: 4),
-                      Text(
-                        '공유됨',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.orange[600],
-                          fontWeight: FontWeight.w500,
+                      Container(
+                        width: 4,
+                        height: 20,
+                        decoration: BoxDecoration(
+                          color: Colors.blue[500],
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                      SizedBox(width: 15),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              data['title'] ?? '',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.grey[800],
+                              ),
+                            ),
+                            if (data['description'] != null && data['description'].isNotEmpty)
+                              Text(
+                                data['description'],
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.grey[600],
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                      GestureDetector(
+                        onTap: () => _deleteSchedule(doc.id),
+                        child: Icon(
+                          Icons.delete_outline,
+                          color: Colors.red[400],
+                          size: 20,
                         ),
                       ),
                     ],
                   ),
-              ],
+                );
+              }).toList(),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildBottomButtons() {
+    return Container(
+      padding: EdgeInsets.all(20),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: [
+          GestureDetector(
+            onTap: () {
+              setState(() {
+                selectedDate = DateTime.now();
+                currentMonth = DateTime.now();
+              });
+            },
+            child: Container(
+              padding: EdgeInsets.symmetric(horizontal: 30, vertical: 12),
+              decoration: BoxDecoration(
+                color: Colors.grey[600],
+                borderRadius: BorderRadius.circular(25),
+              ),
+              child: Text(
+                '오늘',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+          ),
+          GestureDetector(
+            onTap: _showAddScheduleDialog,
+            child: Container(
+              width: 56,
+              height: 56,
+              decoration: BoxDecoration(
+                color: Colors.grey[600],
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.add,
+                color: Colors.white,
+                size: 28,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // 일정 추가 다이얼로그
+  void _showAddScheduleDialog() {
+    final titleController = TextEditingController();
+    final descriptionController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('일정 추가'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              '${selectedDate.month}월 ${selectedDate.day}일',
+              style: TextStyle(color: Colors.grey[600]),
+            ),
+            SizedBox(height: 16),
+            TextField(
+              controller: titleController,
+              decoration: InputDecoration(
+                labelText: '제목',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            SizedBox(height: 16),
+            TextField(
+              controller: descriptionController,
+              decoration: InputDecoration(
+                labelText: '설명 (선택사항)',
+                border: OutlineInputBorder(),
+              ),
+              maxLines: 3,
             ),
           ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('취소'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              if (titleController.text.trim().isNotEmpty) {
+                _addSchedule(titleController.text.trim(), descriptionController.text.trim());
+                Navigator.pop(context);
+              }
+            },
+            child: Text('저장'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // 월 선택 다이얼로그
+  void _showMonthPicker() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('월 선택'),
+        content: Container(
+          height: 300,
+          child: GridView.builder(
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 3,
+              childAspectRatio: 2,
+            ),
+            itemCount: 12,
+            itemBuilder: (context, index) {
+              return GestureDetector(
+                onTap: () {
+                  setState(() {
+                    currentMonth = DateTime(currentMonth.year, index + 1);
+                    // PageController도 해당 월로 이동
+                    int targetPage = 1200 + (index + 1 - DateTime.now().month);
+                    _pageController.animateToPage(
+                      targetPage,
+                      duration: Duration(milliseconds: 300),
+                      curve: Curves.easeInOut,
+                    );
+                  });
+                  Navigator.pop(context);
+                },
+                child: Container(
+                  margin: EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: currentMonth.month == index + 1 ? Colors.blue : Colors.grey[200],
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Center(
+                    child: Text(
+                      '${index + 1}월',
+                      style: TextStyle(
+                        color: currentMonth.month == index + 1 ? Colors.white : Colors.black,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildEmptyState() {
-    String message;
-    String emoji;
-
-    switch (_currentFilter) {
-      case FilterType.personal:
-        message = '개인 할일이 없습니다.\n새로운 할일을 추가해보세요!';
-        emoji = '📝';
-        break;
-      case FilterType.shared:
-        message = '공유된 할일이 없습니다.\n팀원과 할일을 공유해보세요!';
-        emoji = '👥';
-        break;
-      case FilterType.completed:
-        message = '완료된 할일이 없습니다.\n할일을 완료해보세요!';
-        emoji = '🎉';
-        break;
-      default:
-        message = '할일이 없습니다.\n새로운 할일을 추가해보세요!';
-        emoji = '📋';
-    }
-
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Text(emoji, style: TextStyle(fontSize: 80)),
-          SizedBox(height: 20),
-          Text(
-            message,
-            style: TextStyle(
-              fontSize: 16,
-              color: Colors.grey[600],
-            ),
-            textAlign: TextAlign.center,
-          ),
-          SizedBox(height: 30),
-          ElevatedButton.icon(
-            onPressed: _showAddTodoDialog,
-            icon: Icon(Icons.add),
-            label: Text('첫 할일 추가하기'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.blue,
-              foregroundColor: Colors.white,
-              padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              elevation: 4,
-            ),
-          ),
-        ],
-      ),
-    );
+  // Firestore 관련 메서드들
+  Stream<QuerySnapshot> _getSchedulesForDate(DateTime date) {
+    final dateString = '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+    return _firestore
+        .collection('schedules')
+        .where('userId', isEqualTo: user?.uid)
+        .where('date', isEqualTo: dateString)
+        .orderBy('createdAt', descending: false)
+        .snapshots();
   }
 
-  Widget _buildProgressBar(List<SimpleTodo> todos) {
-    if (todos.isEmpty) return Container();
+  Future<void> _addSchedule(String title, String description) async {
+    try {
+      final dateString = '${selectedDate.year}-${selectedDate.month.toString().padLeft(2, '0')}-${selectedDate.day.toString().padLeft(2, '0')}';
+      await _firestore.collection('schedules').add({
+        'userId': user?.uid,
+        'date': dateString,
+        'title': title,
+        'description': description,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
 
-    int completedCount = todos.where((t) => t.completed).length;
-    double progress = completedCount / todos.length;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('일정이 저장되었습니다.')),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('일정 저장에 실패했습니다.')),
+      );
+    }
+  }
 
-    return Container(
-      margin: EdgeInsets.all(20),
-      padding: EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(15),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.1),
-            spreadRadius: 1,
-            blurRadius: 8,
-            offset: Offset(0, 3),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                '진행률',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.grey[700],
-                ),
-              ),
-              Text(
-                '${(progress * 100).round()}% ($completedCount/${todos.length})',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: progress == 1.0 ? Colors.green : Colors.blue,
-                ),
-              ),
-            ],
-          ),
-          SizedBox(height: 12),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(8),
-            child: LinearProgressIndicator(
-              value: progress,
-              backgroundColor: Colors.grey[200],
-              valueColor: AlwaysStoppedAnimation<Color>(
-                progress == 1.0 ? Colors.green : Colors.blue,
-              ),
-              minHeight: 8,
-            ),
-          ),
-          if (progress == 1.0) ...[
-            SizedBox(height: 12),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.celebration, color: Colors.green, size: 20),
-                SizedBox(width: 8),
-                Text(
-                  '모든 할일을 완료했습니다! 🎉',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.green,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ],
-      ),
-    );
+  Future<void> _deleteSchedule(String scheduleId) async {
+    try {
+      await _firestore.collection('schedules').doc(scheduleId).delete();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('일정이 삭제되었습니다.')),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('일정 삭제에 실패했습니다.')),
+      );
+    }
+  }
+
+  DateTime _getDateForCalendar(int weekIndex, int dayIndex, [DateTime? monthToShow]) {
+    DateTime displayMonth = monthToShow ?? currentMonth;
+    final firstDayOfMonth = DateTime(displayMonth.year, displayMonth.month, 1);
+    final firstWeekday = firstDayOfMonth.weekday % 7;
+    final daysFromStart = weekIndex * 7 + dayIndex - firstWeekday;
+    return firstDayOfMonth.add(Duration(days: daysFromStart));
   }
 }
